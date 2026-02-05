@@ -109,7 +109,3 @@ A planilha deve seguir o padrão:
 ## Licença
 
 MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## Contribuição
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou pull requests.
