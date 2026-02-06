@@ -8,9 +8,6 @@ import re
 
 
 class ProcessadorOrcamento:
-    """
-    Processa planilhas orçamentárias e realiza remanejamentos
-    """
 
     def __init__(self, fonte_proibida=None, naturezas_proibidas=None):
         self.df_original = None
@@ -33,7 +30,7 @@ class ProcessadorOrcamento:
         # Processar TODAS as naturezas deficitárias (não apenas linhas de teste)
         self.LINHAS_TESTE = None  # None = processar tudo
 
-        # NOVAS REGRAS: Proteção de saldo mínimo
+        # Proteção de saldo mínimo
         self.PERCENTUAL_RESERVA_MINIMA = 0.20  # 20% do saldo original deve ser preservado
         self.PERCENTUAL_DOACAO_MAXIMA_POR_VEZ = 0.40  # Doar no máximo 40% do saldo total por operação (reduz qtd de remanejamentos)
 
@@ -41,7 +38,6 @@ class ProcessadorOrcamento:
         self.PRIORIZAR_DOACAO_UNICA = True  # Se uma natureza pode cobrir sozinha, usa ela completamente
 
     def log(self, mensagem):
-        """Adiciona mensagem de diagnóstico"""
         print(f"[DEBUG] {mensagem}")
         self.diagnosticos.append(mensagem)
 
@@ -145,10 +141,6 @@ class ProcessadorOrcamento:
         return df
 
     def encontrar_coluna_saldo(self):
-        """
-        Encontra a coluna de saldo buscando pelo nome "7- Previsão Orçamentária" no cabeçalho.
-        Procura nas primeiras 10 linhas da planilha para encontrar a linha de cabeçalho.
-        """
         if self.df_original is None:
             raise Exception("Planilha não carregada!")
 
@@ -175,11 +167,6 @@ class ProcessadorOrcamento:
         )
 
     def identificar_estrutura(self):
-        """
-        Identifica UGs e Naturezas na COLUNA B
-        UG: 6 dígitos + " - " + MAIÚSCULAS (ex: 450201 - DETRAN)
-        Natureza: 6 dígitos + " - " + Maiúsculas/minúsculas (ex: 319011 - Vencimento...)
-        """
         # Padrão: 6 dígitos + " - " + texto
         padrao_geral = re.compile(r'^(\d{6})\s*-\s*(.+)$')
 
@@ -254,7 +241,6 @@ class ProcessadorOrcamento:
         self.log(f"\n   Modo: Processar TODAS as naturezas deficitárias encontradas")
 
     def extrair_valor_coluna(self, row, coluna_idx) -> float:
-        """Extrai valor numérico de uma coluna"""
         if coluna_idx >= len(row):
             return 0.0
 
@@ -273,10 +259,6 @@ class ProcessadorOrcamento:
             return 0.0
 
     def natureza_eh_proibida(self, codigo_natureza: str) -> bool:
-        """
-        Verifica se a natureza está na lista de naturezas proibidas de remanejamento.
-        Essas naturezas são de responsabilidade exclusiva de cada UG.
-        """
         # Remover pontos e espaços para comparação
         codigo_limpo = codigo_natureza.replace('.', '').replace(' ', '').strip()
         return codigo_limpo in self.NATUREZAS_PROIBIDAS
@@ -321,13 +303,11 @@ class ProcessadorOrcamento:
         return max(0, capacidade_real)
 
     def identificar_deficits(self) -> int:
-        """Identifica TODOS os déficits na planilha (exceto fonte 761 e naturezas proibidas)"""
         total_deficits = 0
         ignorados_761 = 0
         ignorados_naturezas_proibidas = 0
 
         for ug in self.ugs_dados:
-            # Ignorar fonte 761
             if ug['fonte'] == self.FONTE_PROIBIDA:
                 deficits_761 = [nat for nat in ug['naturezas'] if nat['saldo_original'] < 0]
                 if deficits_761:
@@ -335,7 +315,7 @@ class ProcessadorOrcamento:
                     self.log(f"\n   UG {ug['codigo']} (Fonte 761): {len(deficits_761)} déficit(s) IGNORADOS (fonte proibida)")
                 continue
 
-            # TODAS as naturezas com saldo negativo (exceto fonte 761 e naturezas proibidas)
+            # TODAS as naturezas com saldo negativo
             deficits_ug = []
             for nat in ug['naturezas']:
                 if nat['saldo_original'] >= 0:
@@ -372,10 +352,6 @@ class ProcessadorOrcamento:
         return total_deficits
 
     def remanejamento_interno(self):
-        """
-        Remanejamento APENAS dentro da mesma UG
-        Processa TODAS as naturezas deficitárias (exceto fonte 761)
-        """
         for ug in self.ugs_dados:
             # Ignorar fonte 761
             if ug['fonte'] == self.FONTE_PROIBIDA:
@@ -497,11 +473,6 @@ class ProcessadorOrcamento:
                     self.log(f"         ⚠️ ATENÇÃO: Ainda falta {necessidade_restante:,.2f} para cobrir totalmente")
 
     def remanejamento_externo(self):
-        """
-        PRIORIDADE 2: Remanejamento entre UGs da mesma fonte
-        Prioriza UG com MAIOR saldo positivo da mesma fonte
-        IGNORA fonte 761
-        """
         self.log("")
 
         # Identificar déficits residuais (exceto fonte 761)
@@ -653,7 +624,6 @@ class ProcessadorOrcamento:
                     self.log(f"         ⚠️ ATENÇÃO: UG {ug_deficit_info['ug']['codigo']} - {nat_deficit['codigo']} ainda falta {necessidade_restante:,.2f}")
 
     def registrar_transferencia(self, ug_origem, nat_origem, ug_destino, nat_destino, valor, tipo):
-        """Registra uma transferência"""
         # VALIDAÇÃO CRÍTICA: Origem deve ser originalmente positiva, Destino deve ser originalmente negativa
         if nat_origem['saldo_original'] <= 0:
             self.log(f"         ❌ ERRO: Tentativa de usar natureza originalmente negativa como doadora: {nat_origem['codigo']} (saldo original: {nat_origem['saldo_original']:,.2f})")
@@ -721,7 +691,6 @@ class ProcessadorOrcamento:
         self.log(f"         << DEPOIS: Origem {nat_origem['codigo']} saldo={nat_origem['saldo_atual']:,.2f} | Destino {nat_destino['codigo']} saldo={nat_destino['saldo_atual']:,.2f}")
 
     def validar_resultado(self) -> Dict[str, bool]:
-        """Valida resultados"""
         tem_negativo = False
 
         self.log("\n   === RESUMO FINAL DE TODAS AS NATUREZAS ===")
@@ -770,7 +739,6 @@ class ProcessadorOrcamento:
         }
 
     def gerar_excel(self) -> bytes:
-        """Gera Excel com 2 abas"""
         output = io.BytesIO()
 
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -791,7 +759,6 @@ class ProcessadorOrcamento:
         return output.getvalue()
 
     def gerar_aba_saldos(self) -> pd.DataFrame:
-        """Gera aba de saldos ajustados"""
         dados = []
 
         for ug in self.ugs_dados:
@@ -823,7 +790,6 @@ class ProcessadorOrcamento:
         return pd.DataFrame(dados)
 
     def gerar_aba_remanejamento(self) -> pd.DataFrame:
-        """Gera aba de remanejamentos com consolidação"""
         if not self.remanejamentos:
             return pd.DataFrame({
                 'Tipo': [],
@@ -882,7 +848,6 @@ class ProcessadorOrcamento:
         return df[colunas]
 
     def formatar_planilha(self, worksheet):
-        """Formata planilha Excel"""
         header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF")
 
