@@ -1,7 +1,15 @@
 import streamlit as st
 import pandas as pd
 import io
+import os
 from src.processador_orcamento import ProcessadorOrcamento
+from src.gerador_lote import GeradorLote
+from datetime import date
+
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
+REGRA41_PATH = os.path.join(ASSETS_DIR, 'Itens da Regra de Mapeamento 41 (2).xls')
+REGRA100_PATH = os.path.join(ASSETS_DIR, 'Itens da Regra de Mapeamento 100 (1).xls')
+
 
 def main():
     st.set_page_config(
@@ -16,7 +24,6 @@ def main():
     seguindo as regras estabelecidas pela SEFAZ.
     """)
 
-    # Upload do arquivo
     st.header("1. Upload da Planilha")
     uploaded_file = st.file_uploader(
         "Envie o arquivo Excel (.xlsx ou .xls)",
@@ -27,7 +34,6 @@ def main():
     if uploaded_file is not None:
         st.success(f"✅ Arquivo carregado: {uploaded_file.name}")
 
-        # Configurações
         st.header("2. Configurações")
 
         with st.expander("⚙️ Configurar Fonte e Naturezas Proibidas", expanded=True):
@@ -42,7 +48,6 @@ def main():
                     placeholder="Ex: 761"
                 )
 
-                # Converter para int ou None
                 fonte_proibida = None
                 if fonte_proibida_input.strip():
                     try:
@@ -195,6 +200,105 @@ def main():
             - **Aba 2**: Quadro de Remanejamento (detalhamento de todas as transferências realizadas)
             """)
 
+            # Gerador
+            st.header("7. Gerar Arquivo SIAFE")
+
+            st.markdown("""
+            Gere o arquivo no formato de importação em lote do SIAFE a partir dos
+            remanejamentos calculados. Você precisa fornecer os arquivos de Regras
+            de Mapeamento e preencher os dados obrigatórios.
+            """)
+
+            with st.expander("📤 Configurar e Gerar Arquivo SIAFE", expanded=False):
+                st.subheader("Dados Obrigatórios")
+
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    data_emissao = st.date_input(
+                        "Data de Emissão",
+                        value=date.today(),
+                        format="DD/MM/YYYY"
+                    )
+                with col_d2:
+                    processo = st.text_input(
+                        "Número do Processo",
+                        value="",
+                        placeholder="Ex: 2026/00001",
+                        help="Número do processo administrativo"
+                    )
+
+                observacao = st.text_input(
+                    "Observação",
+                    value="REMANEJAMENTO FOLHA DE PESSOAL",
+                    help="Texto descritivo para o campo Observação do SIAFE"
+                )
+
+                st.caption("ℹ️ A UG Emitente é preenchida automaticamente com a UG Acrescida (UG Destino) de cada linha.")
+
+                # Botão para gerar
+                gerar_siafe = st.button(
+                    "📄 Gerar Arquivo SIAFE",
+                    type="secondary",
+                    use_container_width=True,
+                )
+
+                if gerar_siafe:
+                    with st.spinner("Gerando arquivo SIAFE..."):
+                        try:
+                            gerador = GeradorLote()
+
+                            # Carregar Regra 41 do diretório assets/
+                            gerador.carregar_regra41(REGRA41_PATH)
+                            st.info(f"📋 Regra 41 carregada: {len(gerador.mapa_ug)} UGs mapeadas")
+
+                            # Carregar Regra 100 do diretório assets/
+                            gerador.carregar_regra100(REGRA100_PATH)
+                            st.info("📋 Regra 100 carregada")
+
+                            # Preparar DataFrame de remanejamentos
+                            df_rem = pd.DataFrame(resultado['remanejamentos'])
+
+                            # Formatar data
+                            data_fmt = data_emissao.strftime("%d/%m/%Y")
+
+                            # Gerar lote
+                            arquivo_siafe, erros = gerador.gerar_lote(
+                                df_remanejamentos=df_rem,
+                                data_emissao=data_fmt,
+                                observacao=observacao,
+                                processo=processo,
+                            )
+
+                            # Exibir erros (se houver)
+                            if erros:
+                                st.markdown(f"**⚠️ {len(erros)} aviso(s) durante a geração:**")
+                                for erro in erros:
+                                    st.warning(erro)
+
+                            # Contar linhas
+                            n_remanejamentos = len(df_rem)
+                            n_linhas_siafe = n_remanejamentos * 2
+
+                            st.success(
+                                f"✅ Arquivo SIAFE gerado com sucesso! "
+                                f"{n_remanejamentos} remanejamentos → {n_linhas_siafe} linhas SIAFE "
+                                f"(Redução + Acréscimo para cada)"
+                            )
+
+                            # Download
+                            st.download_button(
+                                label="📥 Baixar Arquivo SIAFE",
+                                data=arquivo_siafe,
+                                file_name=f"siafe_importacao_{data_emissao.strftime('%Y%m%d')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                type="primary",
+                                use_container_width=True
+                            )
+
+                        except Exception as e:
+                            st.error(f"❌ Erro ao gerar arquivo SIAFE: {str(e)}")
+                            st.exception(e)
+
     else:
         st.info("👆 Por favor, faça o upload de uma planilha Excel para começar.")
 
@@ -207,6 +311,7 @@ def main():
         4. **Download**: Baixe a planilha ajustada com duas abas:
            - Aba 1: Saldos corrigidos
            - Aba 2: Detalhamento dos remanejamentos
+        5. **SIAFE**: Gere o arquivo de importação em lote para o SIAFE
 
         ### ⚙️ Regras de Remanejamento:
 

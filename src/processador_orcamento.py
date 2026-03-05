@@ -8,9 +8,6 @@ import re
 
 
 class ProcessadorOrcamento:
-    """
-    Processa planilhas orçamentárias e realiza remanejamentos
-    """
 
     def __init__(self, fonte_proibida=None, naturezas_proibidas=None):
         self.df_original = None
@@ -46,7 +43,6 @@ class ProcessadorOrcamento:
         self.diagnosticos.append(mensagem)
 
     def processar_arquivo(self, arquivo) -> Dict[str, Any]:
-        """Método principal de processamento"""
         self.log("=" * 80)
         self.log("INICIANDO PROCESSAMENTO - REGRAS SEFAZ COMPLETAS")
         self.log("=" * 80)
@@ -145,10 +141,6 @@ class ProcessadorOrcamento:
         return df
 
     def encontrar_coluna_saldo(self):
-        """
-        Encontra a coluna de saldo buscando pelo nome "7- Previsão Orçamentária" no cabeçalho.
-        Procura nas primeiras 10 linhas da planilha para encontrar a linha de cabeçalho.
-        """
         if self.df_original is None:
             raise Exception("Planilha não carregada!")
 
@@ -186,6 +178,7 @@ class ProcessadorOrcamento:
         COLUNA_B = 1  # Coluna B = índice 1
 
         ug_atual = None
+        fonte_atual = None  # Rastreia a última fonte válida vista (coluna A pode ter células mescladas)
 
         for idx, row in self.df_original.iterrows():
             # Ler valor da coluna B
@@ -212,19 +205,23 @@ class ProcessadorOrcamento:
                     saldo = self.extrair_valor_coluna(row, self.COLUNA_SALDO)
                     fonte = self.extrair_valor_coluna(row, self.COLUNA_FONTE)
 
+                    # Atualiza fonte_atual se a coluna A tiver valor (células mescladas: só a 1ª tem valor)
+                    if fonte > 0:
+                        fonte_atual = int(fonte)
+
                     ug_atual = {
                         'codigo': codigo,
                         'nome': nome,
                         'linha': idx,
                         'linha_excel': idx + 1,
                         'saldo_total': saldo,
-                        'fonte': int(fonte) if fonte > 0 else None,
+                        'fonte': fonte_atual,
                         'naturezas': []
                     }
 
                     self.ugs_dados.append(ug_atual)
 
-                    fonte_str = f"Fonte: {int(fonte)}" if fonte > 0 else "Sem fonte"
+                    fonte_str = f"Fonte: {fonte_atual}" if fonte_atual else "Sem fonte"
                     status = "DÉFICIT" if saldo < 0 else "SUPERÁVIT" if saldo > 0 else "ZERO"
                     self.log(f"   UG: {codigo} - {nome} ({fonte_str}) (linha {idx + 1}) | Saldo: {saldo:,.2f} ({status})")
 
@@ -242,7 +239,7 @@ class ProcessadorOrcamento:
                             'saldo_original': saldo,
                             'saldo_atual': saldo,
                             'dois_primeiros_digitos': codigo[:2],  # Para priorização
-                            'fonte': int(fonte) if fonte > 0 else ug_atual['fonte']  # Herda fonte da UG se não tiver
+                            'fonte': int(fonte) if fonte > 0 else ug_atual['fonte']  # Herda fonte da UG
                         }
 
                         ug_atual['naturezas'].append(natureza)
@@ -697,9 +694,12 @@ class ProcessadorOrcamento:
                     fonte = ug.get('fonte')
                     break
 
+        if fonte is None:
+            self.log(f"         ⚠️ AVISO: Fonte não encontrada para UG {ug_origem} — remanejamento registrado sem fonte")
+
         self.remanejamentos.append({
             'Tipo': tipo,
-            'Fonte': int(fonte) if fonte is not None else '',
+            'Fonte': int(fonte) if fonte is not None else None,
             'UG Origem': ug_origem,
             'Natureza Origem': nat_origem['codigo'],
             'Nome Natureza Origem': nat_origem['nome'],

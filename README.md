@@ -14,6 +14,11 @@ Sistema desenvolvido em **Python + Streamlit** para processamento automatizado d
 - Geração de Excel com duas abas:
   - **Saldos Ajustados**: estrutura original com valores corrigidos
   - **Remanejamentos**: detalhamento de todas as transferências
+- Geração de arquivo de lote SIAFE para importação direta no sistema
+  - Formato de 20 colunas conforme template oficial
+  - Preenchimento automático de Tipo de Crédito, Origem de Recursos, UG Emitente, Órgão, Unidade Orçamentária, Programa de Trabalho e Plano Orçamentário
+  - Cada remanejamento gera 2 linhas: Redução (Tipo Item 2) + Acréscimo (Tipo Item 1)
+  - Regras de mapeamento (Regra 41 e Regra 100) carregadas automaticamente
 
 ## Requisitos
 
@@ -62,6 +67,21 @@ O sistema realiza:
 ### 4. Download
 Baixe a planilha ajustada com todos os remanejamentos documentados.
 
+### 5. Geração do Arquivo SIAFE (Lote)
+Após o processamento, na seção **Gerar Arquivo SIAFE**:
+1. Informe a **Data de Emissão** e o **Número do Processo**
+2. Opcionalmente, edite o campo **Observação**
+3. Clique em **Gerar Arquivo SIAFE**
+4. Baixe o arquivo `.xlsx` pronto para importação no SIAFE-PI
+
+O sistema preenche automaticamente:
+- **UG Emitente**: igual à UG Acrescida (UG Destino) de cada linha
+- **Tipo de Crédito**: `5` (Remanejamento Interno) para mesma UG; `1` (Suplementar) para UGs diferentes
+- **Origem de Recursos**: `0` (Não aplicável) para Tipo 5; `3` (Redução/Anulação) para Tipo 1
+- **Órgão, Unidade Orçamentária, Programa de Trabalho, Plano Orçamentário**: derivados da Regra de Mapeamento 41
+- **Fonte**: formatada conforme padrão SIAFE (ex: `500` → `5.00`, `501` → `5.01`)
+- **Natureza**: formatada conforme padrão SIAFE (ex: `319011` → `3.1.90.11`)
+
 ## Regras de Remanejamento
 
 ### Prioridades
@@ -77,10 +97,15 @@ Baixe a planilha ajustada com todos os remanejamentos documentados.
 ## Estrutura do Projeto
 
 ```
-├── app.py                 # Interface Streamlit
+├── app.py                          # Interface Streamlit
 ├── src/
 │   ├── __init__.py
-│   └── processador_orcamento.py  # Lógica de processamento
+│   ├── processador_orcamento.py    # Lógica de processamento e cálculo de remanejamentos
+│   └── gerador_lote.py             # Geração do arquivo de lote SIAFE
+├── assets/
+│   ├── Itens da Regra de Mapeamento 41.xls   # UG → PT, Órgão, Unidade, Plano
+│   ├── Itens da Regra de Mapeamento 100.xls  # Fonte → formato SIAFE
+│   └── template_Layout SC_*.xls                  # Template oficial SIAFE (20 colunas)
 ├── requirements.txt
 ├── .gitignore
 └── README.md
