@@ -31,7 +31,7 @@ class ProcessadorOrcamento:
         self.LINHAS_TESTE = None  # None = processar tudo
 
         # Proteção de saldo mínimo
-        self.PERCENTUAL_RESERVA_MINIMA = 0.20  # 20% do saldo original deve ser preservado
+        self.PERCENTUAL_RESERVA_MINIMA = 0.10  # 10% do saldo original deve ser preservado
         self.PERCENTUAL_DOACAO_MAXIMA_POR_VEZ = 0.40  # Doar no máximo 40% do saldo total por operação (reduz qtd de remanejamentos)
 
         # OTIMIZAÇÃO: Priorizar doação única quando possível
