@@ -12,8 +12,8 @@ Sistema desenvolvido em **Python + Streamlit** para processamento automatizado d
 - Cálculo automático de remanejamento externo (entre UGs diferentes)
 - Validação de resultados (sem saldos negativos)
 - Geração de Excel com duas abas:
-  - **Saldos Ajustados**: estrutura original com valores corrigidos
-  - **Remanejamentos**: detalhamento de todas as transferências
+  - **Saldos Ajustados**: colunas **Orçamento Inicial** e **Orçamento Ajustado** por UG e natureza
+  - **Remanejamentos**: detalhamento de todas as transferências com tipo classificado
 - Geração de arquivo de lote SIAFE para importação direta no sistema
   - Formato de 20 colunas conforme template oficial
   - Preenchimento automático de Tipo de Crédito, Origem de Recursos, UG Emitente, Órgão, Unidade Orçamentária, Programa de Trabalho e Plano Orçamentário
@@ -88,8 +88,15 @@ O sistema preenche automaticamente:
 1. **Remanejamento Interno**: transferências dentro da mesma UG
 2. **Remanejamento Externo**: transferências entre UGs da mesma fonte
 
+### Tipos de Remanejamento (aba Remanejamentos)
+| Tipo | Descrição |
+|------|-----------|
+| **R.I** | Remanejamento interno coberto por uma única natureza doadora |
+| **R.I (mesmo dígito)** | Remanejamento interno entre naturezas de mesma categoria (mesmos 2 primeiros dígitos) |
+| **Suplementar** | Remanejamento interno com naturezas doadoras de categorias distintas |
+
 ### Proteções
-- Preserva 20% do saldo original de cada natureza doadora
+- Preserva 10% do saldo original de cada natureza doadora
 - Limita doações a 40% do saldo por operação
 - Prioriza doações únicas para reduzir quantidade de transferências
 - Consolida transferências idênticas automaticamente
