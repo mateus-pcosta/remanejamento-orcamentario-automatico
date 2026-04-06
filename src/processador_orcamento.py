@@ -426,7 +426,7 @@ class ProcessadorOrcamento:
                 # Se encontrou doadora única, usar ela
                 if doadora_unica:
                     self.log(f"         • {doadora_unica['codigo']}: cobrindo TUDO em uma única transferência")
-                    self.registrar_transferencia(ug['codigo'], doadora_unica, ug['codigo'], nat_deficit, necessidade_restante, "Interna (única)")
+                    self.registrar_transferencia(ug['codigo'], doadora_unica, ug['codigo'], nat_deficit, necessidade_restante, "R.I")
                     necessidade_restante = 0
                 else:
                     # Caso contrário, distribuir entre várias (lógica atual)
@@ -445,7 +445,7 @@ class ProcessadorOrcamento:
                         valor_transferir = min(necessidade_restante, capacidade_doacao)
 
                         self.log(f"         • {nat_super['codigo']}: pode doar {capacidade_doacao:,.2f}, transferindo {valor_transferir:,.2f}")
-                        self.registrar_transferencia(ug['codigo'], nat_super, ug['codigo'], nat_deficit, valor_transferir, "Interna (mesmos dígitos)")
+                        self.registrar_transferencia(ug['codigo'], nat_super, ug['codigo'], nat_deficit, valor_transferir, "R.I (mesmo dígito)")
 
                         # Saldos já atualizados dentro de registrar_transferencia()
                         necessidade_restante -= valor_transferir
@@ -465,7 +465,7 @@ class ProcessadorOrcamento:
                         valor_transferir = min(necessidade_restante, capacidade_doacao)
 
                         self.log(f"         • {nat_super['codigo']}: pode doar {capacidade_doacao:,.2f}, transferindo {valor_transferir:,.2f}")
-                        self.registrar_transferencia(ug['codigo'], nat_super, ug['codigo'], nat_deficit, valor_transferir, "Interna")
+                        self.registrar_transferencia(ug['codigo'], nat_super, ug['codigo'], nat_deficit, valor_transferir, "Suplementar")
 
                     # Saldos já atualizados dentro de registrar_transferencia()
                     necessidade_restante -= valor_transferir
@@ -778,8 +778,8 @@ class ProcessadorOrcamento:
                 'Tipo': 'TOTAL',
                 'Natureza': '',
                 'Nome Natureza': '',
-                'Saldo Original': ug['saldo_total'],
-                'Saldo Ajustado': round(saldo_total_ajustado, 2)
+                'Orçamento Inicial': ug['saldo_total'],
+                'Orçamento Ajustado': round(saldo_total_ajustado, 2)
             })
 
             for nat in ug['naturezas']:
@@ -790,8 +790,8 @@ class ProcessadorOrcamento:
                     'Tipo': 'Natureza',
                     'Natureza': nat['codigo'],
                     'Nome Natureza': nat['nome'],
-                    'Saldo Original': round(nat['saldo_original'], 2),
-                    'Saldo Ajustado': round(nat['saldo_atual'], 2)
+                    'Orçamento Inicial': round(nat['saldo_original'], 2),
+                    'Orçamento Ajustado': round(nat['saldo_atual'], 2)
                 })
 
         return pd.DataFrame(dados)
