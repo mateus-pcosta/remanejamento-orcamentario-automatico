@@ -2,7 +2,7 @@ import pandas as pd
 import io
 import os
 from typing import Dict, List, Optional, Tuple
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+import xlwt
 
 
 class GeradorLote:
@@ -394,58 +394,25 @@ class GeradorLote:
         df_siafe = pd.DataFrame(linhas, columns=self.COLUNAS_SIAFE)
         df_siafe = df_siafe.astype(str)
 
-        # Gerar Excel usando openpyxl diretamente para preservar texto
+        # Gerar .xls (BIFF) idêntico ao template SIAFE (template_Layout SC): aba 'Planilha 1',
+        # cabeçalho na linha 1, dados a partir da linha 2, estilo padrão (Arial 10, formato Geral,
+        # sem cores, bordas ou larguras personalizadas).
+        # Todas as células são escritas como texto para preservar '5.00', '0000.E0000', '000001'.
         output = io.BytesIO()
-        from openpyxl import Workbook
-        from openpyxl.utils.dataframe import dataframe_to_rows
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = 'SIAFE'
+        wb = xlwt.Workbook(encoding='utf-8')
+        ws = wb.add_sheet('Planilha 1')
 
         # Escrever cabeçalho
-        ws.append(list(df_siafe.columns))
+        for col, nome in enumerate(df_siafe.columns):
+            ws.write(0, col, nome)
 
         # Escrever dados como texto puro (evitar conversão numérica)
-        for _, row in df_siafe.iterrows():
-            ws.append([str(v) for v in row])
-
-        # Formatar
-        self._formatar_planilha(ws)
+        for lin, (_, row) in enumerate(df_siafe.iterrows(), start=1):
+            for col, v in enumerate(row):
+                ws.write(lin, col, str(v))
 
         wb.save(output)
 
         output.seek(0)
         return output.getvalue(), self.erros
-
-    def _formatar_planilha(self, worksheet):
-        """Formata a planilha com estilos visuais."""
-        header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF", size=10)
-
-        for cell in worksheet[1]:
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-
-        for row in worksheet.iter_rows():
-            for cell in row:
-                cell.border = thin_border
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-
-        # Larguras das colunas
-        larguras = {
-            'A': 14, 'B': 14, 'C': 12, 'D': 12, 'E': 14, 'F': 14,
-            'G': 30, 'H': 10, 'I': 15, 'J': 10, 'K': 12, 'L': 14,
-            'M': 30, 'N': 8, 'O': 12, 'P': 10, 'Q': 14, 'R': 8,
-            'S': 14, 'T': 16
-        }
-        for col_letter, width in larguras.items():
-            worksheet.column_dimensions[col_letter].width = width

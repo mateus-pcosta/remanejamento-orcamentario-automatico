@@ -2,8 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Any
 import io
-import openpyxl
-from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+import xlwt
 import re
 
 
@@ -803,20 +802,17 @@ class ProcessadorOrcamento:
         return conferem
 
     def gerar_excel(self) -> bytes:
+        # Gerar .xls (BIFF) com xlwt
         output = io.BytesIO()
+        workbook = xlwt.Workbook(encoding='utf-8')
 
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Aba 1: Saldos
-            df_aba1 = self.gerar_aba_saldos()
-            df_aba1.to_excel(writer, sheet_name='Saldos Ajustados', index=False)
+        # Aba 1: Saldos
+        self.escrever_aba(workbook, 'Saldos Ajustados', self.gerar_aba_saldos())
 
-            # Aba 2: Remanejamentos
-            df_aba2 = self.gerar_aba_remanejamento()
-            df_aba2.to_excel(writer, sheet_name='Remanejamentos', index=False)
+        # Aba 2: Remanejamentos
+        self.escrever_aba(workbook, 'Remanejamentos', self.gerar_aba_remanejamento())
 
-            workbook = writer.book
-            self.formatar_planilha(workbook['Saldos Ajustados'])
-            self.formatar_planilha(workbook['Remanejamentos'])
+        workbook.save(output)
 
         output.seek(0)
         self.log("   Excel gerado com sucesso")
@@ -918,34 +914,36 @@ class ProcessadorOrcamento:
 
         return remanejamentos_consolidados
 
-    def formatar_planilha(self, worksheet):
-        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-        header_font = Font(bold=True, color="FFFFFF")
+    def escrever_aba(self, workbook, nome_aba: str, df: pd.DataFrame):
+        """Escreve um DataFrame numa aba .xls com cabeçalho destacado, bordas e largura automática."""
+        # O formato .xls suporta no máximo 65.536 linhas por aba (incluindo o cabeçalho)
+        if len(df) + 1 > 65536:
+            raise Exception(f"Aba '{nome_aba}' tem {len(df)} linhas, acima do limite de 65.535 do formato .xls")
 
-        for cell in worksheet[1]:
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal='center', vertical='center')
+        worksheet = workbook.add_sheet(nome_aba)
 
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 60)
-            worksheet.column_dimensions[column_letter].width = adjusted_width
-
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
+        estilo_cabecalho = xlwt.easyxf(
+            'font: bold on, colour white;'
+            'pattern: pattern solid, fore_colour dark_blue;'
+            'align: horiz center, vert center;'
+            'borders: left thin, right thin, top thin, bottom thin;'
         )
+        estilo_dados = xlwt.easyxf('borders: left thin, right thin, top thin, bottom thin;')
 
-        for row in worksheet.iter_rows():
-            for cell in row:
-                cell.border = thin_border
+        larguras = [len(str(col)) for col in df.columns]
+
+        for col, nome in enumerate(df.columns):
+            worksheet.write(0, col, str(nome), estilo_cabecalho)
+
+        for lin, row in enumerate(df.itertuples(index=False), start=1):
+            for col, valor in enumerate(row):
+                if pd.isna(valor):
+                    valor = ''
+                elif isinstance(valor, np.generic):
+                    valor = valor.item()  # xlwt não aceita tipos numpy
+                worksheet.write(lin, col, valor, estilo_dados)
+                larguras[col] = max(larguras[col], len(str(valor)))
+
+        # Largura em caracteres (xlwt usa 1/256 de caractere), limitada a 60
+        for col, largura in enumerate(larguras):
+            worksheet.col(col).width = min(largura + 2, 60) * 256

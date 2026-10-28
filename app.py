@@ -188,8 +188,8 @@ def main():
             st.download_button(
                 label="📥 Baixar Planilha Ajustada",
                 data=resultado['arquivo_excel'],
-                file_name=f"orcamento_ajustado_{uploaded_file.name}",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                file_name=f"orcamento_ajustado_{os.path.splitext(uploaded_file.name)[0]}.xls",
+                mime="application/vnd.ms-excel",
                 type="primary",
                 use_container_width=True
             )
@@ -292,8 +292,8 @@ def main():
                             st.download_button(
                                 label="📥 Baixar Arquivo SIAFE",
                                 data=arquivo_siafe,
-                                file_name=f"siafe_importacao_{data_emissao.strftime('%Y%m%d')}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                file_name=f"siafe_importacao_{data_emissao.strftime('%Y%m%d')}.xls",
+                                mime="application/vnd.ms-excel",
                                 type="primary",
                                 use_container_width=True
                             )
