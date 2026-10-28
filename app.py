@@ -255,8 +255,8 @@ def main():
                             gerador.carregar_regra100(REGRA100_PATH)
                             st.info("📋 Regra 100 carregada")
 
-                            # Preparar DataFrame de remanejamentos
-                            df_rem = pd.DataFrame(resultado['remanejamentos'])
+                            # Preparar DataFrame de remanejamentos (mesma lista consolidada da aba Excel)
+                            df_rem = pd.DataFrame(resultado['remanejamentos_consolidados'])
 
                             # Formatar data
                             data_fmt = data_emissao.strftime("%d/%m/%Y")
@@ -275,15 +275,18 @@ def main():
                                 for erro in erros:
                                     st.warning(erro)
 
-                            # Contar linhas
-                            n_remanejamentos = len(df_rem)
-                            n_linhas_siafe = n_remanejamentos * 2
+                            # Contar linhas efetivamente geradas (linhas com erro são descartadas)
+                            n_linhas_siafe = gerador.linhas_geradas
+                            n_remanejamentos = n_linhas_siafe // 2
+                            n_descartados = len(df_rem) - n_remanejamentos
 
                             st.success(
                                 f"✅ Arquivo SIAFE gerado com sucesso! "
                                 f"{n_remanejamentos} remanejamentos → {n_linhas_siafe} linhas SIAFE "
                                 f"(Redução + Acréscimo para cada)"
                             )
+                            if n_descartados > 0:
+                                st.warning(f"⚠️ {n_descartados} remanejamento(s) descartado(s) por erro — veja os avisos acima.")
 
                             # Download
                             st.download_button(

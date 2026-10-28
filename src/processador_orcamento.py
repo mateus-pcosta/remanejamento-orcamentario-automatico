@@ -13,6 +13,7 @@ class ProcessadorOrcamento:
         self.df_original = None
         self.ugs_dados = []
         self.remanejamentos = []
+        self.remanejamentos_consolidados = []
         self.diagnosticos = []
 
         # CONFIGURAÇÃO: Colunas importantes
@@ -97,6 +98,7 @@ class ProcessadorOrcamento:
 
         # 7. Gerar Excel
         self.log("\n7. Gerando arquivo Excel...")
+        self.remanejamentos_consolidados = self.consolidar_remanejamentos()
         arquivo_excel = self.gerar_excel()
 
         self.log("\n" + "=" * 80)
@@ -123,6 +125,7 @@ class ProcessadorOrcamento:
                 if nat['saldo_original'] < 0
             ],
             'remanejamentos': self.remanejamentos,
+            'remanejamentos_consolidados': self.remanejamentos_consolidados,
             'validacoes': validacoes,
             'arquivo_excel': arquivo_excel,
             'diagnosticos': '\n'.join(self.diagnosticos)
@@ -272,8 +275,8 @@ class ProcessadorOrcamento:
         Calcula quanto uma natureza pode doar, respeitando o saldo mínimo de segurança.
 
         REGRAS:
-        1. Preservar no mínimo 20% do saldo original
-        2. Doar no máximo 10% do saldo original por vez (para UGs grandes)
+        1. Preservar no mínimo PERCENTUAL_RESERVA_MINIMA (10%) do saldo original
+        2. Doar no máximo PERCENTUAL_DOACAO_MAXIMA_POR_VEZ (40%) do saldo original por operação
         3. Nunca zerar uma natureza positiva
         """
         saldo_original = natureza['saldo_original']
@@ -283,22 +286,22 @@ class ProcessadorOrcamento:
         if saldo_atual <= 0:
             return 0.0
 
-        # Calcular saldo mínimo a preservar (20% do original)
+        # Calcular saldo mínimo a preservar (10% do original)
         saldo_minimo = saldo_original * self.PERCENTUAL_RESERVA_MINIMA
 
-        # Calcular máximo que pode doar (80% do original)
+        # Calcular máximo que pode doar (90% do original)
         capacidade_maxima = saldo_original - saldo_minimo
 
-        # REGRA ESPECIAL: Para UGs grandes, limitar doação a 10% por vez
+        # Limitar doação a 40% do original por operação
         doacao_maxima_por_vez = saldo_original * self.PERCENTUAL_DOACAO_MAXIMA_POR_VEZ
 
         # Quanto já foi doado até agora
         quanto_ja_doou = saldo_original - saldo_atual
 
-        # Quanto ainda pode doar (respeitando limite de 80% total)
+        # Quanto ainda pode doar (respeitando limite de 90% total)
         quanto_ainda_pode_doar = max(0, capacidade_maxima - quanto_ja_doou)
 
-        # Limitar pela regra de 10% por vez
+        # Limitar pela regra de 40% por operação
         capacidade_real = min(quanto_ainda_pode_doar, doacao_maxima_por_vez)
 
         # Garantir que não vai ultrapassar o saldo atual
@@ -467,8 +470,8 @@ class ProcessadorOrcamento:
                         self.log(f"         • {nat_super['codigo']}: pode doar {capacidade_doacao:,.2f}, transferindo {valor_transferir:,.2f}")
                         self.registrar_transferencia(ug['codigo'], nat_super, ug['codigo'], nat_deficit, valor_transferir, "Suplementar")
 
-                    # Saldos já atualizados dentro de registrar_transferencia()
-                    necessidade_restante -= valor_transferir
+                        # Saldos já atualizados dentro de registrar_transferencia()
+                        necessidade_restante -= valor_transferir
 
                 # Atualizar necessidade
                 nat_deficit['necessidade_total'] = max(0, necessidade_restante)
@@ -740,10 +743,64 @@ class ProcessadorOrcamento:
         if len(self.remanejamentos) > 0:
             self.log(f"   ✓ {len(self.remanejamentos)} remanejamentos realizados")
 
+        somas_conferem = self.conferir_somas()
+
         return {
             'nenhum_saldo_negativo': not tem_negativo,
-            'somas_conferem': len(self.remanejamentos) > 0
+            'somas_conferem': somas_conferem
         }
+
+    def conferir_somas(self) -> bool:
+        """
+        Confere se o quadro de remanejamentos explica exatamente a variação de saldo de cada natureza
+        (recebido - doado = ajustado - inicial) e se o total geral do orçamento foi preservado.
+        """
+        # Movimentação líquida por (Fonte, UG, Natureza) segundo o quadro de remanejamentos
+        movimentacao = {}
+        qtd_transferencias = {}
+        for rem in self.remanejamentos:
+            origem = (rem['Fonte'], rem['UG Origem'], rem['Natureza Origem'])
+            destino = (rem['Fonte'], rem['UG Destino'], rem['Natureza Destino'])
+            movimentacao[origem] = movimentacao.get(origem, 0.0) - rem['Valor']
+            movimentacao[destino] = movimentacao.get(destino, 0.0) + rem['Valor']
+            qtd_transferencias[origem] = qtd_transferencias.get(origem, 0) + 1
+            qtd_transferencias[destino] = qtd_transferencias.get(destino, 0) + 1
+
+        conferem = True
+        chaves_conferidas = set()
+        total_original = 0.0
+        total_ajustado = 0.0
+
+        for ug in self.ugs_dados:
+            for nat in ug['naturezas']:
+                total_original += nat['saldo_original']
+                total_ajustado += nat['saldo_atual']
+
+                chave = (nat['fonte'], ug['codigo'], nat['codigo'])
+                chaves_conferidas.add(chave)
+                variacao = nat['saldo_atual'] - nat['saldo_original']
+                esperado = movimentacao.get(chave, 0.0)
+                # Cada valor do quadro é arredondado em centavos: tolerar até 1 centavo por transferência
+                tolerancia = 0.01 * max(1, qtd_transferencias.get(chave, 0))
+
+                if abs(variacao - esperado) > tolerancia:
+                    conferem = False
+                    self.log(f"   ❌ Soma não confere em {ug['codigo']} - {nat['codigo']} (Fonte {nat['fonte']}): "
+                             f"variação {variacao:,.2f} x quadro {esperado:,.2f}")
+
+        # Transferências que apontam para naturezas inexistentes (ex.: fonte divergente)
+        for chave in movimentacao.keys() - chaves_conferidas:
+            conferem = False
+            self.log(f"   ❌ Remanejamento referencia natureza não encontrada: UG {chave[1]} - {chave[2]} (Fonte {chave[0]})")
+
+        if abs(total_ajustado - total_original) > 0.01:
+            conferem = False
+            self.log(f"   ❌ Total geral alterado: {total_original:,.2f} → {total_ajustado:,.2f}")
+
+        if conferem:
+            self.log("   ✓ Somas das transferências conferem com a variação dos saldos")
+
+        return conferem
 
     def gerar_excel(self) -> bytes:
         output = io.BytesIO()
@@ -797,16 +854,22 @@ class ProcessadorOrcamento:
         return pd.DataFrame(dados)
 
     def gerar_aba_remanejamento(self) -> pd.DataFrame:
+        colunas = ['Tipo', 'Fonte', 'UG Origem', 'Natureza Origem', 'Nome Natureza Origem',
+                   'UG Destino', 'Natureza Destino', 'Nome Natureza Destino', 'Valor']
+
+        if not self.remanejamentos_consolidados:
+            return pd.DataFrame(columns=colunas)
+
+        df = pd.DataFrame(self.remanejamentos_consolidados)
+        return df[colunas]
+
+    def consolidar_remanejamentos(self) -> List[Dict]:
+        """
+        Agrupa transferências idênticas (mesma Fonte + origem → mesmo destino) somando os valores.
+        É a lista usada tanto na aba 'Remanejamentos' quanto no lote SIAFE.
+        """
         if not self.remanejamentos:
-            return pd.DataFrame({
-                'Tipo': [],
-                'Fonte': [],
-                'UG Origem': [],
-                'Natureza Origem': [],
-                'UG Destino': [],
-                'Natureza Destino': [],
-                'Valor': []
-            })
+            return []
 
         self.log(f"\n   === CONSOLIDANDO REMANEJAMENTOS ===")
         self.log(f"   Total antes da consolidação: {len(self.remanejamentos)}")
@@ -837,11 +900,15 @@ class ProcessadorOrcamento:
                     'UG Destino': rem['UG Destino'],
                     'Natureza Destino': rem['Natureza Destino'],
                     'Nome Natureza Destino': rem['Nome Natureza Destino'],
-                    'Valor': rem['Valor']
+                    'Valor': rem['Valor'],
+                    'ug_origem': rem['ug_origem'],
+                    'ug_destino': rem['ug_destino']
                 }
 
-        # Converter de volta para lista
+        # Converter de volta para lista (arredondando somas de floats)
         remanejamentos_consolidados = list(consolidados.values())
+        for rem in remanejamentos_consolidados:
+            rem['Valor'] = round(rem['Valor'], 2)
 
         self.log(f"   Total após consolidação: {len(remanejamentos_consolidados)}")
         reducao = len(self.remanejamentos) - len(remanejamentos_consolidados)
@@ -849,10 +916,7 @@ class ProcessadorOrcamento:
             percentual = (reducao / len(self.remanejamentos)) * 100
             self.log(f"   ✓ Redução: {reducao} remanejamentos ({percentual:.1f}%)")
 
-        df = pd.DataFrame(remanejamentos_consolidados)
-        colunas = ['Tipo', 'Fonte', 'UG Origem', 'Natureza Origem', 'Nome Natureza Origem',
-                   'UG Destino', 'Natureza Destino', 'Nome Natureza Destino', 'Valor']
-        return df[colunas]
+        return remanejamentos_consolidados
 
     def formatar_planilha(self, worksheet):
         header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")

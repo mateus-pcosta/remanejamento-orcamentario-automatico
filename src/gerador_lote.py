@@ -31,6 +31,7 @@ class GeradorLote:
         self.regra100 = None  # DataFrame da Regra 100
         self.mapa_ug = {}     # Cache: UG -> {orgao, unidade, pt, plano}
         self.erros = []       # Erros encontrados durante o processamento
+        self.linhas_geradas = 0  # Linhas SIAFE efetivamente escritas no último lote
 
     # =========================================================================
     # FUNÇÕES DE FORMATAÇÃO
@@ -273,7 +274,6 @@ class GeradorLote:
         Args:
             df_remanejamentos: DataFrame com a aba 'Remanejamentos'
             data_emissao: Data no formato DD/MM/AAAA
-            ug_emitente: UG Emitente (6 dígitos)
             observacao: Texto de observação
             processo: Número do processo
             tipo_abertura: Tipo de Abertura (default '1' = Normal)
@@ -387,6 +387,8 @@ class GeradorLote:
             linha_acrescimo['Natureza'] = nat_dest_fmt
             linha_acrescimo['Plano Orçamentário'] = dados_ug_dest['plano']
             linhas.append(linha_acrescimo)
+
+        self.linhas_geradas = len(linhas)
 
         # Criar DataFrame final com todas as colunas como string
         df_siafe = pd.DataFrame(linhas, columns=self.COLUNAS_SIAFE)
