@@ -72,7 +72,7 @@ Após o processamento, na seção **Gerar Arquivo SIAFE**:
 1. Informe a **Data de Emissão** e o **Número do Processo**
 2. Opcionalmente, edite o campo **Observação**
 3. Clique em **Gerar Arquivo SIAFE**
-4. Baixe o arquivo `.xlsx` pronto para importação no SIAFE-PI
+4. Baixe o arquivo `.xls` (mesmo layout do template SIAFE) pronto para importação no SIAFE-PI
 
 O sistema preenche automaticamente:
 - **UG Emitente**: igual à UG Acrescida (UG Destino) de cada linha
@@ -137,6 +137,7 @@ A planilha deve seguir o padrão:
 - [Streamlit](https://streamlit.io/)
 - [Pandas](https://pandas.pydata.org/)
 - [OpenPyXL](https://openpyxl.readthedocs.io/)
+- [xlwt](https://xlwt.readthedocs.io/) (geração dos arquivos .xls)
 
 ## Licença
 
